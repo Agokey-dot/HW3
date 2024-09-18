@@ -1,0 +1,144 @@
+---
+title: "Class 1 survey"
+output: html_document
+date: "2024-08-28"
+---
+
+# Install packages and libraries
+```{r}
+"C:/Users/percy/Downloads/Class 1 Survey Fall 2024_di(1).csv"
+```
+1. Import class one survey data from our Github site (https://github.com/kijohnson/ADA-2024) (The dataset is called ‘Class 1 Survey Fall 2024_di.csv’), calling the R dataframe that you create C1survey.
+```{r}
+ Class1survey <- read.csv("C:/Users/percy/Downloads/Class 1 Survey Fall 2024_di(1).csv")
+```
+
+1. Import class one survey data from our Github site (https://github.com/kijohnson/ADA-2024) (The dataset is called ‘Class 1 Survey Fall 2024_di.csv’), calling the R dataframe that you create C1survey.
+2. Determine: a. the number of observations (i.e. the number of people who filled out the survey) and b. the number of variables in the dataframe.
+```{r}
+dim(Class1survey)
+#A = 29 observations   #B= 27 variables
+```
+
+3. a. Rename the column variables to something shorter and that is descriptive of what the variable is about (for example like_dogs for the ‘Do you like dogs?’ question variable) and b. Display that they are renamed.
+```{r}
+names(Class1survey)[1:27]<-c("id", "like_cats", "like_dogs", "have_desert", "slogan", "fav_day", "larkORowl", "fav_food", "fav_drink", "fav_season", "fav_month", "hobby", "program", "specialization", "stat_software", "R_exp", "coding_comfort", "coding_length", "top_three","public_health_interest", "fav_num", "bday", "bmonth", "country", "state", "city", "highest_educ_level")
+colnames(Class1survey)
+
+```
+```{r}
+
+```
+
+4. Write code to determine and display the number of factor, integer, numerical, and character variables there are in the C1survey dataset.
+```{r}
+table(sapply(Class1survey,class))
+
+```
+
+5. a. Using code, check the bday and bmonth variables for any unusual or missing values. If you find any, b. describe what you will do with the unusual values in a comment before or immediately following the code that does it, and c. after you have cleaned up any unusual values, find the median bday and month. *Note: please make sure that your bday and month variables are numeric before doing statistics
+```{r}
+#look at values for bday and bmonth
+Class1survey$bday
+Class1survey$bmonth
+#recode for bday
+class(Class1survey$bday)
+Class1survey$bday<-ifelse(Class1survey$bday == "May 21-report 21", "21", Class1survey$bday)
+Class1survey$bday<-ifelse(Class1survey$bday== "March 31st", "31", Class1survey$bday)
+Class1survey$bday
+
+#recode for bmonth
+class(Class1survey$bmonth)
+Class1survey$bmonth<-ifelse(Class1survey$bmonth == "February", "2", Class1survey$bmonth)
+Class1survey$bmonth<-ifelse(Class1survey$bmonth== "May 21-report 5", "5", Class1survey$bmonth)
+Class1survey$bmonth<-ifelse(Class1survey$bmonth == "July", "7", Class1survey$bmonth)
+Class1survey$bmonth<-ifelse(Class1survey$bmonth== "March", "3", Class1survey$bmonth)
+#x<-ifelse(Class1survey$bmonth == "September ", "9", Class1survey$bmonth)
+
+Class1survey$bmonth<-ifelse(Class1survey$bmonth == "September ", "9", Class1survey$bmonth)
+Class1survey$bmonth
+
+#convert to numeric
+Class1survey$bmonth<-as.numeric(Class1survey$bmonth)
+Class1survey$bday<-as.numeric(Class1survey$bday)
+
+class(Class1survey$bmonth)
+class(Class1survey$bday)
+#Find mean and median
+summary(Class1survey$bmonth)
+summary(Class1survey$bday)
+
+median(Class1survey$bday, na.rm=TRUE)
+median(Class1survey$bmonth, na.rm=TRUE)
+
+mean(Class1survey$bday, na.rm=TRUE)
+mean(Class1survey$bmonth, na.rm=TRUE)
+
+
+
+```
+
+6. a. Create a new variable called bseason that gives the season according to Northern Meteorological season in which respondents were born (winter = 12/1 to 2/29, spring = 3/1 to 5/31, summer = 6/1 to 8/31, fall = 9/1 to 11/30). b. Using the table function, print a table of Seasons in the columns and bmonths in the rows that allows you to check that the coding is correct c. Sum the columns using the addmargins function to answer the question of how many classmates were born in each season? Include your answer in the code.
+```{r}
+library(dplyr)
+Class1survey <- Class1survey %>%
+  mutate(bseason=case_when(bmonth %in% c(12,1,2) ~"Winter",
+                           bmonth %in% c(3,4,5) ~"Spring",
+                           bmonth %in% c(6,7,8) ~"Summer",
+                           bmonth %in% c(9,10,11) ~"Fall"))
+table(Class1survey$bmonth, Class1survey$bseason) # check variable
+
+
+
+# b. 
+table(Class1survey$bseason,Class1survey$bmonth)
+
+
+# c.
+tab<-addmargins(table(Class1survey$bmonth, Class1survey$bseason, useNA = "always"), 1)
+tab
+
+
+# Births by season: Fall = 4 Winter = 9 Spring = 8 Summer = 8
+```
+```
+
+7. Pick your favorite variable or variables to analyze, come up with a question you want to answer with that variable or variables, generate the code, and provide an answer to your question. Describe what you did using comments (i.e. #’s).
+```{r}
+#summary of stat_software
+summary(Class1survey$stat_software)
+table(Class1survey$stat_software)
+
+
+#Summary for Highest educational levels
+summary(Class1survey$highest_educ_level)
+table(Class1survey$highest_educ_level)
+
+# Research question
+#1) How many people had R as their primary statistical language?
+#ans: 8
+#SPSS-10  Stata-4  SAS-1  R-8 Excel-5  Both R and SPSS-1
+
+#2.How many people had a Master's degree?
+#Ans:5
+#Bachelor's degree- 20   Doctoral degree-4  Master's degree-5
+
+
+
+```
+```
+Research question
+1) How many people had R as their primary statistical language?
+ans: 8
+SPSS-10  Stata-4  SAS-1  R-8 Excel-5  Both R and SPSS-1
+
+2.How many people had a Master's degree?
+Ans:5
+Bachelor's degree- 20   Doctoral degree-4  Master's degree-5
+
+```{r}
+write.csv(Class1survey,"class i survey cleaned.csv")
+```
+
+
+
