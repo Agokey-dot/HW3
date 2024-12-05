@@ -1,0 +1,739 @@
+---
+title: "ADA_FINAL"
+author: "Agokey"
+date: "2024-11-24"
+output: html_document
+---
+```{r} 
+#Install packages
+library(tidyverse)
+library(table1)
+library(haven)
+library(magrittr)
+library(ggfortify)
+library(dplyr)
+library(ggplot2)
+library(gmodels)
+library(grid)
+library(png)
+library(MASS)
+library(haven)
+library(labelled)
+library(foreign)
+library(DiagrammeR)
+```
+
+```
+```
+```{r}
+# Load necessary libraries
+library(haven)  # For reading SAS XPT files
+library(dplyr)  # For data manipulation
+```
+
+
+```{r}
+# Read the datasets(Datasets based on demographic,24-hr dietary recall, sex hormones and BMI)
+demo <- read_xpt("C:/Users/percy/Downloads/DEMO_I(1).XPT")
+foodint <- read_xpt("C:/Users/percy/Downloads/DR1IFF_I.XPT")
+hormone <- read_xpt("C:/Users/percy/Downloads/TST_I.XPT")
+BMI <- read_xpt("C:/Users/percy/Downloads/BMX_I(1).XPT")
+```
+
+```{r}
+# Display column names for each dataset
+colnames(demo)
+colnames(foodint)
+colnames(hormone)
+colnames(BMI)
+```
+```{r}
+# Find shared columns across datasets
+common_cols <- Reduce(intersect, list(colnames(demo), colnames(foodint), colnames(hormone), colnames(BMI)))
+common_cols  # Print shared columns
+```
+
+```{r}
+# Merge the datasets
+merged_data <- demo %>%
+  full_join(foodint, by = "SEQN") %>%
+  full_join(hormone, by = "SEQN") %>%
+  full_join(BMI, by = "SEQN")
+```
+
+```{r}
+library(dplyr)
+
+# Aggregate demographic, hormone, or dietary data by SEQN
+aggregated_data <- merged_data %>%
+  group_by(SEQN) %>%
+  summarise(
+    AGE = first(RIDAGEYR),  
+    SEX = first(RIAGENDR),
+    RACE_ETHNICITY = first(RIDRETH1),
+    BMI = first(BMXBMI),
+    FAMILY_INCOME = first(INDFMPIR),
+    TESTOSTERONE = first(LBXTST),
+    ESTROGEN = first(LBXEST),
+    SHBG = first(LBXSHBG),
+    TOTAL_CALORIES = first(DR1IKCAL),
+    SUGAR = first(DR1ISUGR),
+    FAT = first(DR1ITFAT),
+    PROTEIN = first(DR1IPROT),
+    CARBS = first(DR1ICARB)
+  ) %>%
+  ungroup() 
+
+# Check the result
+head(aggregated_data)
+
+```
+```{r}
+
+```
+
+```{r}
+# Data cleaning and filtering
+
+# Step 1: Age Restriction (10–19 years)
+age_filter <- aggregated_data %>%
+    filter(AGE >= 10 & AGE <= 19)
+ex1 <- nrow(aggregated_data)- nrow(age_filter)
+ex1
+# Step 2: Exclude Missing Dietary Data (Ultra-Processed Foods)
+UPF_filter <- age_filter %>%
+    filter(!is.na(TOTAL_CALORIES) & !is.na(SUGAR) & 
+           !is.na(FAT) & !is.na(PROTEIN) & 
+           !is.na(CARBS))
+ex2 <- nrow(age_filter) - nrow(UPF_filter)
+ex2
+# Step 3: Exclude Missing Hormone Data (Testosterone, Estrogen, SHBG)
+hormone_filter <- UPF_filter %>%
+    filter(!is.na(ESTROGEN) & !is.na(TESTOSTERONE) & !is.na(SHBG))
+ex3 <- nrow(UPF_filter) - nrow(hormone_filter) 
+ex3
+# Step 4: Exclude Missing Covariate Data
+covariate_filter <- hormone_filter %>%
+    filter(!is.na(SEX) & !is.na(RACE_ETHNICITY) & !is.na(BMI) &
+            !is.na(FAMILY_INCOME))
+ex4 <- nrow(hormone_filter) - nrow(covariate_filter) 
+ex4
+```
+```{r}
+pacman::p_load(tidyverse, readr, table1, DiagrammeR, rsvg)
+# tidyverse is for data management
+# readr is for reading in the csv file
+# DiagrammeR is for generating Figure 1
+# table1 is for generating table 1
+# rsvg for exporting figure 1
+```
+```
+```{r}
+# Figure 1 to show how the final dataset was arrived at
+grViz(diagram = "digraph flowchart{ # gives beginning of flowchart
+
+      # node definitions with substituted label text
+      
+      node [fontname = Helvetica, shape = rectangle, fontsize=10] 
+      
+      # Define the nodes: nodes indicate how many boxes you will have in your diagram. Since I have three sets of exclusions, I will have four nodes.
+      
+      node1 [label = '@@1'] # starting number
+      node2 [label = '@@2'] # number after exclusion 1
+      node3 [label = '@@3'] # number after exclusion 2
+      node4 [label = '@@4'] # number after exclusion 3
+      node5 [label = '@@5'] # number after exclusion 4
+      # edge definitions with the node IDs are used to indicate how the rectangle boxes flow from each other. 
+      
+      node1 -> node2 -> node3 -> node4 -> node5
+}
+      # This set of code provides the text in each rectangle box.
+      [1]: 'Aggregated NHANES data 2015-2016  n = 9971'
+      [2]: 'Excluding 8230 individuals who are not within 10-19 years  n = 1741'
+      [3]: 'Excluding 210 individuals with missing data on Ultra-processed foods  n = 1531'
+      [4]: 'Excluding 254 individuals with missing data on TT,E2 and SHBG levels  n = 1277'
+      [5]: 'Excluding 117 individuals with missing data on sex,race/ethnicity,BMI and family income  n= 1160'
+      ")
+
+
+
+```
+
+
+```{r}
+#creating categorical variable 
+# step 1 : Creating age categories
+# Recoding Age into categories
+covariate_filter <- covariate_filter %>%
+  mutate(
+    AGE_GROUP = case_when(
+      AGE >= 10 & AGE <= 12 ~ 1,  # 10-12 years
+      AGE >= 13 & AGE <= 16 ~ 2,  # 13-16 years
+      AGE >= 17 & AGE <= 19 ~ 3,  # 17-19 years
+      TRUE ~ NA_real_
+    )) %>%
+    
+    mutate( SEX = case_when(
+      SEX == 1 ~ 1,  # Male
+      SEX == 2 ~ 2,  # Female
+      TRUE ~ NA_real_
+    ),
+    
+    # Recoding Race/Ethnicity (RIDRETH1)
+    RACE_ETHNICITY = case_when(
+      RACE_ETHNICITY == 1 ~ 1,  # Non-Hispanic White
+      RACE_ETHNICITY == 2 ~ 2,  # Non-Hispanic Black
+      RACE_ETHNICITY == 3 ~ 3,  # Mexican American
+      RACE_ETHNICITY == 4 ~ 4,  # Other Hispanic
+      RACE_ETHNICITY == 5 ~ 5,  # Non-Hispanic Asian
+      RACE_ETHNICITY == 6 ~ 6,  # Other/Multiracial
+      TRUE ~ NA_real_
+    ),
+    
+    # Recoding BMI (BMXBMI)
+    BMI_CATEGORY = case_when(
+      BMI < 18.5 ~ 1,  # Underweight
+      BMI >= 18.5 & BMI < 25 ~ 2,  # Normal weight
+      BMI >= 25 & BMI < 30 ~ 3,  # Overweight
+      BMI >= 30 & BMI < 35 ~ 4,  # Obese I
+      BMI >= 35 ~ 5,  # Obese II & III
+      TRUE ~ NA_real_
+    ),
+    
+    # Recoding Family Income (INDFMPIR) into new categories
+    FAMILY_INCOME_CATEGORY = case_when(
+      FAMILY_INCOME < 0.50 ~ 1,  # <0.50
+      FAMILY_INCOME >= 0.50 & FAMILY_INCOME < 1.00 ~ 2,  # 0.50 - 0.99
+      FAMILY_INCOME >= 1.00 & FAMILY_INCOME < 1.24 ~ 3,  # 1.00 - 1.24
+      FAMILY_INCOME >= 1.25 & FAMILY_INCOME < 1.49 ~ 4,  # 1.25 - 1.49
+      FAMILY_INCOME >= 1.50 & FAMILY_INCOME < 1.84 ~ 5,  # 1.50 - 1.84
+      FAMILY_INCOME >= 1.85 & FAMILY_INCOME < 1.99 ~ 6,  # 1.85 - 1.99
+      FAMILY_INCOME >= 2.00 ~ 7,  # >2.00
+      TRUE ~ NA_real_
+    )
+  )
+
+# View the updated dataset with all categories
+head(covariate_filter)
+
+# Check the distribution of the categories
+table(covariate_filter$AGE_GROUP)
+table(covariate_filter$SEX)
+table(covariate_filter$RACE_ETHNICITY)
+table(covariate_filter$BMI_CATEGORY)
+table(covariate_filter$FAMILY_INCOME_CATEGORY)
+
+
+```
+
+```{r}
+# Creating table one to show the demographics of the participants
+table1(~ as.factor(AGE) + as.factor(SEX) + as.factor(RACE_ETHNICITY) + as.factor(BMI)  + as.factor(FAMILY_INCOME), covariate_filter) 
+```
+
+
+```{r}
+#Creating table to show the demographics of the participants stratified by gender
+table1(~ as.factor(AGE) + as.factor(RACE_ETHNICITY) + as.factor(BMI)  + as.factor(FAMILY_INCOME)|as.factor(SEX), covariate_filter)
+
+
+```
+
+
+```{r}
+#Creating table to show the demographics of the participants stratified by BMI
+table1(~ as.factor(AGE_GROUP) + as.factor(SEX) + as.factor(RACE_ETHNICITY)  + as.factor(FAMILY_INCOME_CATEGORY)|as.factor(BMI_CATEGORY), covariate_filter)
+
+
+```
+
+
+```{r}
+install.packages("dplyr")
+library(dplyr)
+
+covariate_filter <- covariate_filter %>%
+  mutate(FAMILY_INCOME = ifelse(is.na(FAMILY_INCOME), "Unknown", FAMILY_INCOME))
+
+# Ensure it's a factor
+covariate_filter$FAMILY_INCOME_CATEGORY <- as.factor(covariate_filter$FAMILY_INCOME)
+
+# Creating table to show the demographics of the participants stratified by Family income to poverty ratio
+table1(~ as.factor(AGE) + as.factor(SEX) + as.factor(RACE_ETHNICITY) + as.factor(BMI) | FAMILY_INCOME, covariate_filter)
+
+#i imputed the missing data in family_income.
+```
+
+```{r}
+# Create a function to classify food based on quantities of macronutrients
+categorize_food_by_quantity <- function(CARBS, PROTEIN, FAT, SUGAR, TOTAL_CALORIES) {
+  # Handle missing values
+  if (is.na(CARBS) || is.na(PROTEIN) || is.na(FAT) || is.na(SUGAR) || is.na(TOTAL_CALORIES)) {
+    return("Unknown")
+  }
+  
+  # Ultra-Processed Food (UPF)
+  if (SUGAR > 15 || FAT > 20 || TOTAL_CALORIES > 400 || CARBS > 40 || PROTEIN < 5) {
+    return("Ultra-Processed Food")
+  }
+  
+  # Processed Food
+  else if ((SUGAR >= 5 && SUGAR <= 15) || (FAT >= 5 && FAT <= 20) || (TOTAL_CALORIES >= 150 && TOTAL_CALORIES <= 400) ||
+           (CARBS >= 20 && CARBS <= 40) || (PROTEIN >= 5 && PROTEIN <= 10)) {
+    return("Processed Food")
+  }
+  
+  # Minimally Processed Food
+  else if (SUGAR < 5 && FAT < 5 && TOTAL_CALORIES < 150 && CARBS <= 20 && PROTEIN >= 10) {
+    return("Minimally Processed Food")
+  }
+  
+  # If no category matches, label as Unknown
+  return("Unknown")
+}
+
+# Apply the function to classify each food item
+covariate_filter$NOVA_CATEGORY <- mapply(categorize_food_by_quantity, 
+                                          covariate_filter$CARBS, 
+                                          covariate_filter$PROTEIN, 
+                                          covariate_filter$FAT, 
+                                          covariate_filter$SUGAR, 
+                                          covariate_filter$TOTAL_CALORIES)
+
+# Check the new classification
+head(covariate_filter$NOVA_CATEGORY)
+
+summary(covariate_filter)
+table(covariate_filter$NOVA_CATEGORY)
+head(covariate_filter)
+
+
+```
+
+
+```{r}
+install.packages("ggplot2")
+library(ggplot2)
+library(tidyr)
+#Creating scatter plots for the hormones and the NOVA food categories
+# Reshape data into a long format
+long_data <- covariate_filter %>%
+  pivot_longer(cols = c(TESTOSTERONE, ESTROGEN, SHBG), 
+               names_to = "Hormone", 
+               values_to = "Value")
+
+# Scatterplot with facets
+ggplot(long_data, aes(x = NOVA_CATEGORY, y = Value, color = NOVA_CATEGORY)) +
+  geom_jitter(width = 0.2, height = 0, alpha = 0.6) +
+  geom_boxplot(alpha = 0.2, outlier.shape = NA) +
+  labs(title = "Hormone Levels by Food Category",
+       x = "Food Category",
+       y = "Hormone Levels") +
+  facet_wrap(~ Hormone, scales = "free_y") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_color_brewer(palette = "Set2")
+
+```
+
+```{r}
+library(ggplot2)
+#Creating density plots for the hormones and the NOVA food categories
+# Density plot for Testosterone
+ggplot(covariate_filter, aes(x = TESTOSTERONE, fill = NOVA_CATEGORY)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Density of Testosterone Levels by Food Category",
+       x = "Testosterone Levels",
+       y = "Density") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+
+# Density plot for Estrogen
+ggplot(covariate_filter, aes(x = ESTROGEN, fill = NOVA_CATEGORY)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Density of Estrogen Levels by Food Category",
+       x = "Estrogen Levels",
+       y = "Density") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3")
+
+# Density plot for SHBG
+ggplot(covariate_filter, aes(x = SHBG, fill = NOVA_CATEGORY)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Density of SHBG Levels by Food Category",
+       x = "SHBG Levels",
+       y = "Density") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Pastel1")
+
+```
+
+
+```{r}
+# Fit the linear regression model for TESTOSTERONE
+model_testosterone <- lm(TESTOSTERONE ~ NOVA_CATEGORY + BMI + AGE + SEX + FAMILY_INCOME, 
+                          data = covariate_filter)
+
+# Summary of the model
+summary(model_testosterone)
+
+# Confidence intervals for the coefficients
+confint(model_testosterone)
+
+# Fit for ESTROGEN
+model_estrogen <- lm(log(ESTROGEN) ~ NOVA_CATEGORY + BMI + AGE + SEX + FAMILY_INCOME, 
+                     data = covariate_filter)
+                     
+# Summary of the model
+summary(model_estrogen)
+
+# Confidence intervals for the coefficients
+confint(model_estrogen)
+                     
+
+# Fit for SHBG
+model_shbg <- lm(SHBG ~ NOVA_CATEGORY + BMI + AGE + SEX + FAMILY_INCOME, 
+                 data = covariate_filter)
+
+```
+
+```{r}
+# Install and load the broom package
+
+install.packages("broom")
+library(broom)
+# Tidy results for TESTOSTERONE
+testosterone_results <- tidy(model_testosterone)
+
+# Tidy results for ESTROGEN and SHBG
+estrogen_results <- tidy(model_estrogen)
+shbg_results <- tidy(model_shbg)
+
+# Combine results into a summary table
+results_table <- bind_rows(
+  testosterone_results %>% mutate(Outcome = "Testosterone"),
+  estrogen_results %>% mutate(Outcome = "Estrogen"),
+  shbg_results %>% mutate(Outcome = "SHBG")
+)
+
+# Filter for NOVA_CATEGORY and clean up
+results_table <- results_table %>%
+  filter(term %in% c("NOVA_CATEGORYProcessed Food", "NOVA_CATEGORYUltra-Processed Food")) %>%
+  select(Outcome, term, estimate, conf.low, conf.high, p.value) %>%
+  rename(
+    Exposure = term,
+    Coefficient = estimate,
+    `Lower 95% CI` = conf.low,
+    `Upper 95% CI` = conf.high,
+    `P-value` = p.value
+  )
+
+# View the final table
+print(results_table)
+
+```
+
+```{r}
+str(testosterone_results)
+str(estrogen_results)
+str(shbg_results)
+
+# Fit regression models
+testosterone_model <- lm(TESTOSTERONE ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+estrogen_model <- lm(ESTROGEN ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+shbg_model <- lm(SHBG ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+
+print(testosterone_model)
+print(estrogen_model)
+print(shbg_model)
+
+
+
+```
+
+```{r}
+# Add confidence intervals to the regression results
+testosterone_results <- broom::tidy(testosterone_model) %>%
+  bind_cols(as.data.frame(confint(testosterone_model)) %>% rename(conf.low = `2.5 %`, conf.high = `97.5 %`))
+
+estrogen_results <- broom::tidy(estrogen_model) %>%
+  bind_cols(as.data.frame(confint(estrogen_model)) %>% rename(conf.low = `2.5 %`, conf.high = `97.5 %`))
+
+shbg_results <- broom::tidy(shbg_model) %>%
+  bind_cols(as.data.frame(confint(shbg_model)) %>% rename(conf.low = `2.5 %`, conf.high = `97.5 %`))
+
+# Combine results into a single table
+results_table <- bind_rows(
+  testosterone_results %>% mutate(Outcome = "Testosterone"),
+  estrogen_results %>% mutate(Outcome = "Estrogen"),
+  shbg_results %>% mutate(Outcome = "SHBG")
+)
+
+# Filter for the variables of interest
+results_table <- results_table %>%
+  filter(term %in% c("NOVA_CATEGORYProcessed Food", "NOVA_CATEGORYUltra-Processed Food")) %>%
+  select(Outcome, term, estimate, conf.low, conf.high, p.value) %>%
+  rename(
+    Exposure = term,
+    Coefficient = estimate,
+    `Lower 95% CI` = conf.low,
+    `Upper 95% CI` = conf.high,
+    `P-value` = p.value
+  )
+
+print(results_table)
+
+```
+
+
+
+```{r}
+# Linear regression for testosterone with confounder adjustment
+testosterone_model <- lm(TESTOSTERONE ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+summary(testosterone_model)
+
+# Confidence intervals for testosterone model
+confint(testosterone_model)
+
+# Linear regression for estrogen with confounder adjustment
+estrogen_model <- lm(ESTROGEN ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+summary(estrogen_model)
+
+# Confidence intervals for estrogen model
+confint(estrogen_model)
+
+# Linear regression for SHBG with confounder adjustment
+shbg_model <- lm(SHBG ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+summary(shbg_model)
+
+# Confidence intervals for SHBG model
+confint(shbg_model)
+
+```
+
+
+```{r}
+# Model with interaction term
+testosterone_interaction <- lm(TESTOSTERONE ~ NOVA_CATEGORY * SEX + AGE + BMI + FAMILY_INCOME_CATEGORY, data = covariate_filter)
+summary(testosterone_interaction)
+
+testosterone_bmi_interaction <- lm(TESTOSTERONE ~ NOVA_CATEGORY * BMI_CATEGORY + AGE + SEX + FAMILY_INCOME_CATEGORY, data = covariate_filter)
+summary(testosterone_bmi_interaction)
+
+```
+
+```{r}
+# Model with interaction between UPF and BMI
+testosterone_bmi_interaction <- lm(TESTOSTERONE ~ NOVA_CATEGORY * BMI_CATEGORY + AGE + SEX + FAMILY_INCOME_CATEGORY, data = covariate_filter)
+
+# View summary
+summary(testosterone_bmi_interaction)
+
+```
+
+```{r}
+library(ggplot2)
+
+# Histogram of the original testosterone distribution
+ggplot(covariate_filter, aes(x = TESTOSTERONE)) +
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) +
+  labs(title = "Original Testosterone Distribution", x = "Testosterone", y = "Frequency")
+
+# Repeat for estrogen and SHBG
+ggplot(covariate_filter, aes(x = ESTROGEN)) +
+  geom_histogram(bins = 30, fill = "green", alpha = 0.7) +
+  labs(title = "Original Estrogen Distribution", x = "Estrogen", y = "Frequency")
+
+ggplot(covariate_filter, aes(x = SHBG)) +
+  geom_histogram(bins = 30, fill = "purple", alpha = 0.7) +
+  labs(title = "Original SHBG Distribution", x = "SHBG", y = "Frequency")
+
+
+
+
+library(ggplot2)
+library(tidyr)
+
+# Select the hormone variables and transform to long format
+hormone_data <- covariate_filter %>%
+  select(TESTOSTERONE, ESTROGEN, SHBG) %>%
+  pivot_longer(cols = everything(), names_to = "Hormone", values_to = "Value")
+
+# Plot all distributions together
+ggplot(hormone_data, aes(x = Value, fill = Hormone)) +
+  geom_histogram(bins = 30, alpha = 0.6, position = "identity") +
+  facet_wrap(~ Hormone, scales = "free") +
+  scale_fill_manual(values = c("blue", "green", "purple")) +
+  labs(
+    title = "Distributions of Testosterone, Estrogen, and SHBG",
+    x = "Hormone Levels",
+    y = "Frequency",
+    fill = "Hormone"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Apply log transformation to the hormones
+covariate_filter$LOG_TESTOSTERONE <- log(covariate_filter$TESTOSTERONE)
+covariate_filter$LOG_ESTROGEN <- log(covariate_filter$ESTROGEN)
+covariate_filter$LOG_SHBG <- log(covariate_filter$SHBG)
+
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Create log-transformed variables
+covariate_filter <- covariate_filter %>%
+  mutate(
+    LOG_TESTOSTERONE = log(TESTOSTERONE),
+    LOG_ESTROGEN = log(ESTROGEN),
+    LOG_SHBG = log(SHBG)
+  )
+
+# Combine untransformed and log-transformed variables into long format
+hormone_data_combined <- covariate_filter %>%
+  select(
+    TESTOSTERONE, ESTROGEN, SHBG,
+    LOG_TESTOSTERONE, LOG_ESTROGEN, LOG_SHBG
+  ) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Variable",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Transformation = ifelse(substr(Variable, 1, 4) == "LOG_", "Log-Transformed", "Untransformed"),
+    Hormone = sub("LOG_", "", Variable)  # Remove "LOG_" prefix
+  )
+
+# Plot distributions for both transformations
+ggplot(hormone_data_combined, aes(x = Value, fill = Hormone)) +
+  geom_histogram(bins = 30, alpha = 0.6, position = "identity") +
+  facet_wrap(~ Transformation + Hormone, scales = "free", ncol = 3) +
+  scale_fill_manual(values = c("blue", "green", "purple")) +
+  labs(
+    title = "Distributions of Hormones (Untransformed and Log-Transformed)",
+    x = "Hormone Levels",
+    y = "Frequency",
+    fill = "Hormone"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+  )
+
+
+# Regression models with log-transformed hormones
+log_testosterone_model <- lm(LOG_TESTOSTERONE ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+log_estrogen_model <- lm(LOG_ESTROGEN ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+log_shbg_model <- lm(LOG_SHBG ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+
+# Summarize the models
+summary(log_testosterone_model)
+summary(log_estrogen_model)
+summary(log_shbg_model)
+
+
+```
+
+```{r}
+# Install car package if not already installed
+install.packages("car")
+library(car)
+
+# Check VIF for the testosterone model
+vif(model_testosterone)
+
+# Repeat for other models
+vif(model_estrogen)
+vif(model_shbg)
+
+# Q-Q plot for residuals of testosterone model
+qqnorm(residuals(model_testosterone))
+qqline(residuals(model_testosterone), col = "red")
+
+# Shapiro-Wilk test for normality
+shapiro.test(residuals(model_testosterone))
+
+# Repeat for other models
+qqnorm(residuals(model_estrogen))
+qqline(residuals(model_estrogen), col = "red")
+shapiro.test(residuals(model_estrogen))
+
+qqnorm(residuals(model_shbg))
+qqline(residuals(model_shbg), col = "red")
+shapiro.test(residuals(model_shbg))
+
+# Residual plot for testosterone model
+plot(fitted(model_testosterone), residuals(model_testosterone),
+     main = "Residuals vs Fitted for Testosterone",
+     xlab = "Fitted values", ylab = "Residuals")
+abline(h = 0, col = "red")
+
+# Repeat for other models
+plot(fitted(model_estrogen), residuals(model_estrogen),
+     main = "Residuals vs Fitted for Estrogen",
+     xlab = "Fitted values", ylab = "Residuals")
+abline(h = 0, col = "red")
+
+plot(fitted(model_shbg), residuals(model_shbg),
+     main = "Residuals vs Fitted for SHBG",
+     xlab = "Fitted values", ylab = "Residuals")
+abline(h = 0, col = "red")
+
+# Scale-Location plot for testosterone model
+plot(fitted(model_testosterone), sqrt(abs(residuals(model_testosterone))),
+     main = "Scale-Location Plot for Testosterone",
+     xlab = "Fitted values", ylab = "√|Residuals|")
+abline(h = 0, col = "red")
+
+# Breusch-Pagan test for heteroscedasticity
+install.packages("lmtest")
+library(lmtest)
+
+bptest(model_testosterone)
+
+# Repeat for other models
+bptest(model_estrogen)
+bptest(model_shbg)
+
+
+
+```
+
+```{r}
+# Full model for Testosterone
+full_model_testosterone <- lm(TESTOSTERONE ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+
+# Reduced model for Testosterone (excluding FAMILY_INCOME)
+reduced_model_testosterone <- lm(TESTOSTERONE ~ NOVA_CATEGORY + AGE + SEX + BMI, data = covariate_filter)
+
+# Likelihood Ratio Test
+anova(reduced_model_testosterone, full_model_testosterone)
+
+# Full model for Estrogen
+full_model_estrogen <- lm(ESTROGEN ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+
+# Reduced model for Estrogen (excluding FAMILY_INCOME)
+reduced_model_estrogen <- lm(ESTROGEN ~ NOVA_CATEGORY + AGE + SEX + BMI, data = covariate_filter)
+
+# Likelihood Ratio Test
+anova(reduced_model_estrogen, full_model_estrogen)
+
+# Full model for SHBG
+full_model_shbg <- lm(SHBG ~ NOVA_CATEGORY + AGE + SEX + BMI + FAMILY_INCOME, data = covariate_filter)
+
+# Reduced model for SHBG (excluding FAMILY_INCOME)
+reduced_model_shbg <- lm(SHBG ~ NOVA_CATEGORY + AGE + SEX + BMI, data = covariate_filter)
+
+# Likelihood Ratio Test
+anova(reduced_model_shbg, full_model_shbg)
+
+
+```
+
+
